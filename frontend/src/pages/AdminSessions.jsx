@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getSessions, endSession } from '../api'
+import { getSessions, endSession, deleteSession } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../hooks/useToast'
 import ToastContainer from '../components/ToastContainer'
@@ -41,6 +41,20 @@ function AdminSessions() {
       fetchSessions()
     } catch (err) {
       error(err.response?.data?.error || 'Failed to end session')
+    }
+  }
+
+  const handleDeleteSession = async (sessionId) => {
+    if (!window.confirm('Are you sure you want to delete this session? This action cannot be undone and will delete all associated attendance records.')) {
+      return
+    }
+
+    try {
+      await deleteSession(sessionId)
+      success('Session deleted successfully!')
+      fetchSessions()
+    } catch (err) {
+      error(err.response?.data?.error || 'Failed to delete session')
     }
   }
 
@@ -136,8 +150,11 @@ function AdminSessions() {
                       <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-bold text-blue-900 uppercase tracking-wider hidden lg:table-cell">
                         Expires
                       </th>
-                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-bold text-blue-900 uppercase tracking-wider">
-                        Duration
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-bold text-blue-900 uppercase tracking-wider hidden md:table-cell">
+                        Date & Time
+                      </th>
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-bold text-blue-900 uppercase tracking-wider hidden lg:table-cell">
+                        Type
                       </th>
                       <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-bold text-blue-900 uppercase tracking-wider">
                         Status
@@ -166,11 +183,16 @@ function AdminSessions() {
                           <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 hidden md:table-cell">
                             {formatDate(session.createdAt)}
                           </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 hidden lg:table-cell">
-                            {formatDate(session.expiryTime)}
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 hidden md:table-cell">
+                            <div>{session.date || 'N/A'}</div>
+                            <div className="text-xs text-gray-400">
+                              {session.startTime} - {session.endTime}
+                            </div>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
-                            {session.durationMinutes} min
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 hidden lg:table-cell">
+                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                              {session.sessionType || 'Both'}
+                            </span>
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                             {isActive ? (
@@ -184,14 +206,22 @@ function AdminSessions() {
                             )}
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm">
-                            {isActive && (
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              {isActive && (
+                                <button
+                                  onClick={() => handleEndSession(session.sessionId)}
+                                  className="text-orange-600 hover:text-orange-800 font-semibold transition-colors text-left sm:text-center min-h-[44px] sm:min-h-0 px-2 sm:px-0"
+                                >
+                                  End
+                                </button>
+                              )}
                               <button
-                                onClick={() => handleEndSession(session.sessionId)}
-                                className="text-red-600 hover:text-red-800 font-semibold transition-colors min-h-[44px] sm:min-h-0 px-2 sm:px-0"
+                                onClick={() => handleDeleteSession(session.sessionId)}
+                                className="text-red-600 hover:text-red-800 font-semibold transition-colors text-left sm:text-center min-h-[44px] sm:min-h-0 px-2 sm:px-0"
                               >
-                                End
+                                Delete
                               </button>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       )

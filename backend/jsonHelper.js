@@ -111,8 +111,81 @@ function updateStudent(studentId, updates) {
 
 function deleteStudent(studentId) {
   const students = getStudents();
-  const filtered = students.filter(s => s.id !== studentId);
-  return writeJSON(STUDENTS_FILE, filtered);
+  const studentExists = students.some(s => s.id === studentId);
+
+  if (studentExists) {
+    const filteredStudents = students.filter(s => s.id !== studentId);
+    const writeStudentsSuccess = writeJSON(STUDENTS_FILE, filteredStudents);
+
+    // Cascade delete to attendance records
+    const attendance = getAttendance();
+    const filteredAttendance = attendance.filter(a => a.studentId !== studentId);
+    const writeAttendanceSuccess = writeJSON(ATTENDANCE_FILE, filteredAttendance);
+
+    return writeStudentsSuccess && writeAttendanceSuccess;
+  }
+  return false; // Student not found
+}
+
+// Attendance operations (updated for In/Out model)
+function getAttendanceById(attendanceId) {
+  const attendance = getAttendance();
+  return attendance.find(a => a.id === attendanceId);
+}
+
+function updateAttendance(attendanceId, updates) {
+  const attendance = getAttendance();
+  const index = attendance.findIndex(a => a.id === attendanceId);
+  if (index !== -1) {
+    attendance[index] = { ...attendance[index], ...updates };
+    // Recalculate duration if inTime or outTime changed
+    if (updates.inTime || updates.outTime) {
+      const record = attendance[index];
+      if (record.inTime && record.outTime) {
+        const inTime = new Date(record.inTime);
+        const outTime = new Date(record.outTime);
+        record.duration = Math.round((outTime - inTime) / (1000 * 60)); // duration in minutes
+        record.status = 'present';
+      } else if (record.inTime) {
+        record.status = 'partial';
+        record.duration = null;
+      } else {
+        record.status = 'absent';
+        record.duration = null;
+      }
+    }
+    return writeJSON(ATTENDANCE_FILE, attendance);
+  }
+  return false;
+}
+
+function deleteAttendance(attendanceId) {
+  const attendance = getAttendance();
+  const initialLength = attendance.length;
+  const filtered = attendance.filter(a => a.id !== attendanceId);
+
+  if (filtered.length < initialLength) {
+    return writeJSON(ATTENDANCE_FILE, filtered);
+  }
+  return false; // Attendance record not found
+}
+
+function deleteSession(sessionId) {
+  const sessions = getSessions();
+  const sessionExists = sessions.some(s => s.sessionId === sessionId);
+
+  if (sessionExists) {
+    const filteredSessions = sessions.filter(s => s.sessionId !== sessionId);
+    const writeSessionsSuccess = writeJSON(SESSIONS_FILE, filteredSessions);
+
+    // Cascade delete to attendance records
+    const attendance = getAttendance();
+    const filteredAttendance = attendance.filter(a => a.sessionId !== sessionId);
+    const writeAttendanceSuccess = writeJSON(ATTENDANCE_FILE, filteredAttendance);
+
+    return writeSessionsSuccess && writeAttendanceSuccess;
+  }
+  return false; // Session not found
 }
 
 module.exports = {
@@ -124,9 +197,13 @@ module.exports = {
   deleteStudent,
   getAttendance,
   addAttendance,
+  getAttendanceById,
+  updateAttendance,
+  deleteAttendance,
   getSessions,
   addSession,
   getSessionById,
-  updateSession
+  updateSession,
+  deleteSession
 };
 

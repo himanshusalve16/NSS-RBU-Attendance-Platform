@@ -105,9 +105,17 @@ function StudentScanner() {
       })
       
       if (response.success) {
-        success(`Attendance marked successfully for ${response.data.studentName}!`)
-        setResult(response.data)
-        setStudentId('') // Clear for next scan
+        const action = response.action || 'in'
+        if (action === 'in') {
+          success(`In time marked for ${response.data.studentName}!`)
+        } else {
+          success(`Out time marked for ${response.data.studentName}!`)
+        }
+        setResult({
+          ...response.data,
+          action: action
+        })
+        // Don't clear studentId - allow them to scan again for out time
       } else {
         error(response.error || 'Failed to mark attendance')
       }
@@ -198,12 +206,25 @@ function StudentScanner() {
               <span className="text-xl sm:text-2xl text-white">✓</span>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-base sm:text-lg font-bold text-green-800 mb-2">Attendance Marked!</h3>
+              <h3 className="text-base sm:text-lg font-bold text-green-800 mb-2">
+                {result.action === 'in' ? 'In Time Marked!' : 'Out Time Marked!'}
+              </h3>
               <div className="space-y-1 text-xs sm:text-sm text-green-700">
-                <p><strong>Student:</strong> {result.studentName}</p>
-                <p><strong>Class:</strong> {result.studentClass}</p>
+                <p><strong>Name:</strong> {result.studentName}</p>
+                <p><strong>Role:</strong> {result.studentRole || 'Volunteer'}</p>
                 <p><strong>Session:</strong> {result.sessionName}</p>
-                <p><strong>Time:</strong> {new Date(result.timestamp).toLocaleString()}</p>
+                {result.inTime && (
+                  <p><strong>In Time:</strong> {new Date(result.inTime).toLocaleString()}</p>
+                )}
+                {result.outTime && (
+                  <p><strong>Out Time:</strong> {new Date(result.outTime).toLocaleString()}</p>
+                )}
+                {result.duration && (
+                  <p><strong>Duration:</strong> {result.duration} minutes</p>
+                )}
+                {result.action === 'in' && !result.outTime && (
+                  <p className="text-orange-600 font-semibold mt-2">Scan again to mark out time</p>
+                )}
               </div>
             </div>
             <button

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key-change-this-in-production';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // Simple session tokens (in production, use JWT or proper session management)
 const activeTokens = new Set();

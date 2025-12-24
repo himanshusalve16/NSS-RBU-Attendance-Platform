@@ -16,7 +16,10 @@ function AdminDashboard() {
   const [showCreateSession, setShowCreateSession] = useState(false)
   const [sessionForm, setSessionForm] = useState({
     name: '',
-    durationMinutes: 60
+    date: new Date().toISOString().split('T')[0], // Today's date
+    startTime: '09:00',
+    endTime: '17:00',
+    sessionType: 'Both' // 'Core', 'Volunteer', or 'Both'
   })
   const { logout } = useAuth()
   const { toasts, removeToast, success, error } = useToast()
@@ -59,7 +62,13 @@ function AdminDashboard() {
       const response = await createSession(sessionForm)
       if (response.success) {
         success('Session created successfully!')
-        setSessionForm({ name: '', durationMinutes: 60 })
+        setSessionForm({ 
+          name: '', 
+          date: new Date().toISOString().split('T')[0],
+          startTime: '09:00',
+          endTime: '17:00',
+          sessionType: 'Both'
+        })
         setShowCreateSession(false)
         fetchStats()
         
@@ -107,9 +116,11 @@ function AdminDashboard() {
               <body>
                 <div class="container">
                   <h2>${sessionForm.name}</h2>
-                  <p style="color: #666; margin-bottom: 20px;">Scan this QR code to mark attendance</p>
+                  <p style="color: #666; margin-bottom: 10px;">${sessionForm.date} | ${sessionForm.startTime} - ${sessionForm.endTime}</p>
+                  <p style="color: #666; margin-bottom: 20px;">Type: ${sessionForm.sessionType}</p>
+                  <p style="color: #666; margin-bottom: 20px;">Scan this QR code to mark In/Out time</p>
                   <img src="${response.data.qrCode}" alt="QR Code" />
-                  <p style="color: #999; font-size: 12px; margin-top: 15px;">Valid for ${sessionForm.durationMinutes} minutes</p>
+                  <p style="color: #999; font-size: 12px; margin-top: 15px;">Valid until ${new Date(response.data.endDateTime).toLocaleString()}</p>
                   <button onclick="window.print()">🖨️ Print QR Code</button>
                 </div>
               </body>
@@ -220,44 +231,87 @@ function AdminDashboard() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">Create New Session</h2>
               <button
-                onClick={() => {
-                  setShowCreateSession(false)
-                  setSessionForm({ name: '', durationMinutes: 60 })
-                }}
+                  onClick={() => {
+                    setShowCreateSession(false)
+                    setSessionForm({ 
+                      name: '', 
+                      date: new Date().toISOString().split('T')[0],
+                      startTime: '09:00',
+                      endTime: '17:00',
+                      sessionType: 'Both'
+                    })
+                  }}
                 className="text-gray-400 hover:text-gray-600 text-2xl"
               >
                 ×
               </button>
             </div>
             <form onSubmit={handleCreateSession} className="space-y-4 sm:space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Session Name *
+                </label>
+                <input
+                  type="text"
+                  value={sessionForm.name}
+                  onChange={(e) => setSessionForm({ ...sessionForm, name: e.target.value })}
+                  required
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[44px]"
+                  placeholder="e.g., Weekly Meeting"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Session Name *
+                    Date *
                   </label>
                   <input
-                    type="text"
-                    value={sessionForm.name}
-                    onChange={(e) => setSessionForm({ ...sessionForm, name: e.target.value })}
+                    type="date"
+                    value={sessionForm.date}
+                    onChange={(e) => setSessionForm({ ...sessionForm, date: e.target.value })}
                     required
                     className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[44px]"
-                    placeholder="e.g., Math Class - Dec 7"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Duration (minutes) *
+                    Start Time *
                   </label>
                   <input
-                    type="number"
-                    value={sessionForm.durationMinutes}
-                    onChange={(e) => setSessionForm({ ...sessionForm, durationMinutes: parseInt(e.target.value) || 60 })}
+                    type="time"
+                    value={sessionForm.startTime}
+                    onChange={(e) => setSessionForm({ ...sessionForm, startTime: e.target.value })}
                     required
-                    min="1"
-                    max="1440"
                     className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[44px]"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    End Time *
+                  </label>
+                  <input
+                    type="time"
+                    value={sessionForm.endTime}
+                    onChange={(e) => setSessionForm({ ...sessionForm, endTime: e.target.value })}
+                    required
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[44px]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Session Type *
+                </label>
+                <select
+                  value={sessionForm.sessionType}
+                  onChange={(e) => setSessionForm({ ...sessionForm, sessionType: e.target.value })}
+                  required
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[44px]"
+                >
+                  <option value="Core">Core Members Only</option>
+                  <option value="Volunteer">Volunteers Only</option>
+                  <option value="Both">Both Core & Volunteers</option>
+                </select>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
@@ -270,7 +324,13 @@ function AdminDashboard() {
                   type="button"
                   onClick={() => {
                     setShowCreateSession(false)
-                    setSessionForm({ name: '', durationMinutes: 60 })
+                    setSessionForm({ 
+                      name: '', 
+                      date: new Date().toISOString().split('T')[0],
+                      startTime: '09:00',
+                      endTime: '17:00',
+                      sessionType: 'Both'
+                    })
                   }}
                   className="w-full sm:w-auto px-6 py-3 sm:py-3.5 bg-gray-200 text-gray-700 font-semibold rounded-xl transition-all hover:bg-gray-300 text-base sm:text-lg min-h-[44px]"
                 >

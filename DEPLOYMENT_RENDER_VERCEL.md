@@ -293,3 +293,5 @@ Share the frontend URL with your users to start tracking attendance!
 
 **Note**: On Render free tier, the backend may take 30-60 seconds to respond on the first request after inactivity. This is normal and expected behavior. Consider upgrading to a paid plan for always-on service.
 
+
+

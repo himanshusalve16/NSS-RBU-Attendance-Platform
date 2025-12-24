@@ -12,7 +12,7 @@ function AdminStudents() {
   const [formData, setFormData] = useState({
     id: '',
     name: '',
-    class: ''
+    role: 'Volunteer' // Default to Volunteer
   })
   const { logout } = useAuth()
   const { toasts, removeToast, success, error } = useToast()
@@ -26,7 +26,7 @@ function AdminStudents() {
       const response = await getStudents()
       setStudents(response.data || [])
     } catch (err) {
-      error('Failed to load students')
+      error('Failed to load participants')
     } finally {
       setLoading(false)
     }
@@ -47,23 +47,23 @@ function AdminStudents() {
       if (editingStudent) {
         const response = await updateStudent(editingStudent.id, formData)
         if (response.success) {
-          success('Student updated successfully!')
-          setFormData({ id: '', name: '', class: '' })
+          success('Participant updated successfully!')
+          setFormData({ id: '', name: '', role: 'Volunteer' })
           setEditingStudent(null)
           setShowAddForm(false)
           fetchStudents()
         } else {
-          error(response.error || 'Failed to update student')
+          error(response.error || 'Failed to update participant')
         }
       } else {
         const response = await addStudent(formData)
         if (response.success) {
-          success('Student added successfully!')
-          setFormData({ id: '', name: '', class: '' })
+          success('Participant added successfully!')
+          setFormData({ id: '', name: '', role: 'Volunteer' })
           setShowAddForm(false)
           fetchStudents()
         } else {
-          error(response.error || 'Failed to add student')
+          error(response.error || 'Failed to add participant')
         }
       }
     } catch (err) {
@@ -76,27 +76,27 @@ function AdminStudents() {
     setFormData({
       id: student.id,
       name: student.name,
-      class: student.class
+      role: student.role || 'Volunteer'
     })
     setShowAddForm(true)
   }
 
   const handleDelete = async (studentId) => {
-    if (!window.confirm('Are you sure you want to delete this student?')) {
+    if (!window.confirm('Are you sure you want to delete this participant?')) {
       return
     }
 
     try {
       await deleteStudent(studentId)
-      success('Student deleted successfully!')
+      success('Participant deleted successfully!')
       fetchStudents()
     } catch (err) {
-      error(err.response?.data?.error || 'Error deleting student')
+      error(err.response?.data?.error || 'Error deleting participant')
     }
   }
 
   const handleCancel = () => {
-    setFormData({ id: '', name: '', class: '' })
+    setFormData({ id: '', name: '', role: 'Volunteer' })
     setEditingStudent(null)
     setShowAddForm(false)
   }
@@ -125,8 +125,8 @@ function AdminStudents() {
                 <span className="text-2xl sm:text-3xl">👨‍🎓</span>
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Student Management</h1>
-                <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Add, edit, or remove students</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Participant Management</h1>
+                <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Add, edit, or remove participants</p>
               </div>
             </div>
             <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3">
@@ -153,7 +153,7 @@ function AdminStudents() {
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 md:p-8 mb-6 sm:mb-8 border border-gray-100 animate-fade-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">
-                {editingStudent ? 'Edit Student' : 'Add New Student'}
+                {editingStudent ? 'Edit Participant' : 'Add New Participant'}
               </h2>
               <button
                 onClick={handleCancel}
@@ -166,7 +166,7 @@ function AdminStudents() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Student ID {!editingStudent && '*'}
+                    ID {!editingStudent && '*'}
                   </label>
                   <input
                     type="text"
@@ -176,7 +176,7 @@ function AdminStudents() {
                     required={!editingStudent}
                     disabled={!!editingStudent}
                     className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all disabled:bg-gray-100 min-h-[44px]"
-                    placeholder="e.g., S001"
+                    placeholder="e.g., V001, C001"
                   />
                 </div>
                 <div>
@@ -195,17 +195,19 @@ function AdminStudents() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Class *
+                    Role *
                   </label>
-                  <input
-                    type="text"
-                    name="class"
-                    value={formData.class}
+                  <select
+                    name="role"
+                    value={formData.role}
                     onChange={handleInputChange}
                     required
                     className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-base focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all min-h-[44px]"
-                    placeholder="e.g., Class 10A"
-                  />
+                  >
+                    <option value="Core Member">Core Member</option>
+                    <option value="Volunteer">Volunteer</option>
+                    <option value="Admin">Admin</option>
+                  </select>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -213,7 +215,7 @@ function AdminStudents() {
                   type="submit"
                   className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3 sm:py-3.5 px-6 rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] text-base sm:text-lg min-h-[44px]"
                 >
-                  {editingStudent ? 'Update Student' : 'Add Student'}
+                  {editingStudent ? 'Update Participant' : 'Add Participant'}
                 </button>
                 <button
                   type="button"
@@ -235,7 +237,7 @@ function AdminStudents() {
               className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center space-x-2 text-base sm:text-lg min-h-[44px]"
             >
               <span className="text-lg sm:text-xl">+</span>
-              <span>Add New Student</span>
+              <span>Add New Participant</span>
             </button>
           </div>
         )}
@@ -245,8 +247,8 @@ function AdminStudents() {
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-3xl sm:text-4xl">👨‍🎓</span>
             </div>
-            <p className="text-gray-600 text-base sm:text-lg mb-2">No students found.</p>
-            <p className="text-sm sm:text-base text-gray-500">Add your first student to get started.</p>
+            <p className="text-gray-600 text-base sm:text-lg mb-2">No participants found.</p>
+            <p className="text-sm sm:text-base text-gray-500">Add your first participant to get started.</p>
           </div>
         ) : (
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl overflow-hidden border border-gray-100">
@@ -262,7 +264,7 @@ function AdminStudents() {
                       Name
                     </th>
                     <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-bold text-purple-900 uppercase tracking-wider hidden sm:table-cell">
-                      Class
+                      Role
                     </th>
                     <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-bold text-purple-900 uppercase tracking-wider">
                       Actions
@@ -278,11 +280,11 @@ function AdminStudents() {
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                         <div>
                           <div className="font-medium">{student.name}</div>
-                          <div className="text-gray-500 text-xs sm:hidden">{student.class}</div>
+                          <div className="text-gray-500 text-xs sm:hidden">{student.role || 'Volunteer'}</div>
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 hidden sm:table-cell">
-                        {student.class}
+                        {student.role || 'Volunteer'}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm">
                         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -310,7 +312,7 @@ function AdminStudents() {
         )}
 
         <div className="mt-6 text-center text-sm text-gray-600">
-          Total students: <span className="font-bold text-purple-600">{students.length}</span>
+          Total participants: <span className="font-bold text-purple-600">{students.length}</span>
         </div>
       </div>
     </div>
