@@ -21,9 +21,8 @@ const {
   addSession,
   getSessionById,
   updateSession,
-  deleteSession,
-  findAttendanceBySessionAndStudent
-} = require('./dbHelper');
+  deleteSession
+} = require('./jsonHelper');
 const {
   verifyPassword,
   generateToken,
@@ -213,7 +212,7 @@ app.post('/logout', (req, res) => {
 });
 
 // Verify session QR code (public - students use this)
-app.post('/verify-session', async (req, res) => {
+app.post('/verify-session', (req, res) => {
   try {
     const { sessionId, expiryTime, signature } = req.body;
     
@@ -244,7 +243,7 @@ app.post('/verify-session', async (req, res) => {
     }
 
     // Verify session exists and is active
-    const session = await getSessionById(sessionId);
+    const session = getSessionById(sessionId);
     if (!session) {
       return res.status(404).json({
         success: false,
@@ -274,7 +273,7 @@ app.post('/verify-session', async (req, res) => {
 
 // Mark attendance (public - Core Members and Volunteers use this)
 // Single QR code handles both In and Out times
-app.post('/mark-attendance', async (req, res) => {
+app.post('/mark-attendance', (req, res) => {
   try {
     const { sessionId, studentId, signature, expiryTime } = req.body;
     
@@ -310,7 +309,7 @@ app.post('/mark-attendance', async (req, res) => {
     }
 
     // Verify session exists and is active
-    const session = await getSessionById(sessionId);
+    const session = getSessionById(sessionId);
     if (!session) {
       return res.status(404).json({
         success: false,
@@ -326,10 +325,12 @@ app.post('/mark-attendance', async (req, res) => {
     }
 
     // Get student/participant
-    const student = await getStudentById(studentId);
+    const student = getStudentById(studentId);
     if (!student) {
       if (NODE_ENV === 'development') {
         console.log('Student not found for ID:', studentId);
+        const allStudents = getStudents();
+        console.log('Available student IDs:', allStudents.map(s => s.id));
       }
       return res.status(404).json({
         success: false,
@@ -358,7 +359,10 @@ app.post('/mark-attendance', async (req, res) => {
     }
 
     // Check existing attendance record
-    const existing = await findAttendanceBySessionAndStudent(sessionId, studentId);
+    const attendance = getAttendance();
+    let existing = attendance.find(
+      a => a.sessionId === sessionId && a.studentId === studentId
+    );
 
     const serverTimestamp = new Date().toISOString(); // Server-generated timestamp
 
@@ -379,13 +383,12 @@ app.post('/mark-attendance', async (req, res) => {
         status: 'partial' // Partial because no out time yet
       };
 
-      const newRecord = await addAttendance(attendanceRecord);
-      if (newRecord) {
+      if (addAttendance(attendanceRecord)) {
         res.json({
           success: true,
           message: `In time marked for ${student.name}`,
           action: 'in',
-          data: newRecord
+          data: attendanceRecord
         });
       } else {
         res.status(500).json({ success: false, error: 'Failed to save attendance' });
@@ -411,14 +414,20 @@ app.post('/mark-attendance', async (req, res) => {
       const outTime = new Date(serverTimestamp);
       const duration = Math.round((outTime - inTime) / (1000 * 60)); // duration in minutes
 
-      const updatedRecord = await updateAttendance(existing.id, { outTime: serverTimestamp, duration, status: 'present' });
+      // Update attendance record
+      const updated = {
+        ...existing,
+        outTime: serverTimestamp,
+        duration: duration,
+        status: 'present'
+      };
 
-      if (updatedRecord) {
+      if (updateAttendance(existing.id, { outTime: serverTimestamp, duration, status: 'present' })) {
         res.json({
           success: true,
           message: `Out time marked for ${student.name}`,
           action: 'out',
-          data: updatedRecord
+          data: updated
         });
       } else {
         res.status(500).json({ success: false, error: 'Failed to update attendance' });
@@ -483,7 +492,7 @@ app.post('/admin/create-session', requireAdmin, [
     // Use end time as expiry time
     const signature = generateSignature(sessionId, endDateTime.toISOString());
 
-    const sessionData = {
+    const session = {
       sessionId,
       name,
       date: date,
@@ -498,9 +507,7 @@ app.post('/admin/create-session', requireAdmin, [
       signature
     };
 
-    const newSession = await addSession(sessionData);
-
-    if (newSession) {
+    if (addSession(session)) {
       // Generate QR code data
       const qrData = JSON.stringify({
         sessionId,
@@ -521,7 +528,7 @@ app.post('/admin/create-session', requireAdmin, [
           success: true,
           message: 'Session created successfully',
           data: {
-            ...newSession,
+            ...session,
             qrCode: qrCodeDataURL,
             qrData: qrData
           }
@@ -532,7 +539,7 @@ app.post('/admin/create-session', requireAdmin, [
           success: true,
           message: 'Session created successfully (QR generation failed)',
           data: {
-            ...newSession,
+            ...session,
             qrData: qrData
           }
         });
@@ -546,9 +553,9 @@ app.post('/admin/create-session', requireAdmin, [
 });
 
 // Get all sessions
-app.get('/admin/sessions', requireAdmin, async (req, res) => {
+app.get('/admin/sessions', requireAdmin, (req, res) => {
   try {
-    const sessions = await getSessions();
+    const sessions = getSessions();
     res.json({ success: true, data: sessions });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -556,10 +563,10 @@ app.get('/admin/sessions', requireAdmin, async (req, res) => {
 });
 
 // Get session by ID
-app.get('/admin/sessions/:sessionId', requireAdmin, async (req, res) => {
+app.get('/admin/sessions/:sessionId', requireAdmin, (req, res) => {
   try {
     const { sessionId } = req.params;
-    const session = await getSessionById(sessionId);
+    const session = getSessionById(sessionId);
     
     if (!session) {
       return res.status(404).json({
@@ -575,13 +582,11 @@ app.get('/admin/sessions/:sessionId', requireAdmin, async (req, res) => {
 });
 
 // End session
-app.post('/admin/sessions/:sessionId/end', requireAdmin, async (req, res) => {
+app.post('/admin/sessions/:sessionId/end', requireAdmin, (req, res) => {
   try {
     const { sessionId } = req.params;
     
-    const updatedSession = await updateSession(sessionId, { status: 'ended', endedAt: new Date().toISOString() });
-
-    if (updatedSession) {
+    if (updateSession(sessionId, { status: 'ended', endedAt: new Date().toISOString() })) {
       res.json({ success: true, message: 'Session ended successfully' });
     } else {
       res.status(404).json({ success: false, error: 'Session not found' });
@@ -592,9 +597,9 @@ app.post('/admin/sessions/:sessionId/end', requireAdmin, async (req, res) => {
 });
 
 // Get all students (admin only)
-app.get('/admin/students', requireAdmin, async (req, res) => {
+app.get('/admin/students', requireAdmin, (req, res) => {
   try {
-    const students = await getStudents();
+    const students = getStudents();
     res.json({ success: true, data: students });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -606,7 +611,7 @@ app.post('/admin/students', requireAdmin, [
   body('id').trim().notEmpty().withMessage('ID is required').isLength({ min: 1, max: 50 }),
   body('name').trim().notEmpty().withMessage('Name is required').isLength({ min: 1, max: 100 }),
   body('role').isIn(['Admin', 'Core Member', 'Volunteer']).withMessage('Role must be Admin, Core Member, or Volunteer')
-], async (req, res) => {
+], (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -618,8 +623,8 @@ app.post('/admin/students', requireAdmin, [
 
     const { id, name, role } = req.body;
     
-    const existingStudent = await getStudentById(id);
-    if (existingStudent) {
+    const students = getStudents();
+    if (students.find(s => s.id === id)) {
       return res.status(400).json({
         success: false,
         error: 'ID already exists'
@@ -627,9 +632,8 @@ app.post('/admin/students', requireAdmin, [
     }
 
     const newStudent = { id, name, role };
-    const createdStudent = await addStudent(newStudent);
-    if (createdStudent) {
-      res.json({ success: true, data: createdStudent });
+    if (addStudent(newStudent)) {
+      res.json({ success: true, data: newStudent });
     } else {
       res.status(500).json({ success: false, error: 'Failed to save participant' });
     }
@@ -643,7 +647,7 @@ app.post('/admin/students', requireAdmin, [
 });
 
 // Update student/participant (admin only)
-app.put('/admin/students/:studentId', requireAdmin, async (req, res) => {
+app.put('/admin/students/:studentId', requireAdmin, (req, res) => {
   try {
     const { studentId } = req.params;
     const { name, role } = req.body;
@@ -660,10 +664,9 @@ app.put('/admin/students/:studentId', requireAdmin, async (req, res) => {
       updates.role = role;
     }
 
-    const updatedStudent = await updateStudent(studentId, updates);
-
-    if (updatedStudent) {
-      res.json({ success: true, data: updatedStudent });
+    if (updateStudent(studentId, updates)) {
+      const student = getStudentById(studentId);
+      res.json({ success: true, data: student });
     } else {
       res.status(404).json({ success: false, error: 'Participant not found' });
     }
@@ -673,11 +676,11 @@ app.put('/admin/students/:studentId', requireAdmin, async (req, res) => {
 });
 
 // Delete student (admin only)
-app.delete('/admin/students/:studentId', requireAdmin, async (req, res) => {
+app.delete('/admin/students/:studentId', requireAdmin, (req, res) => {
   try {
     const { studentId } = req.params;
     
-    if (await deleteStudent(studentId)) {
+    if (deleteStudent(studentId)) {
       res.json({ success: true, message: 'Student deleted successfully' });
     } else {
       res.status(404).json({ success: false, error: 'Student not found' });
@@ -688,11 +691,11 @@ app.delete('/admin/students/:studentId', requireAdmin, async (req, res) => {
 });
 
 // Delete session (admin only)
-app.delete('/admin/sessions/:sessionId', requireAdmin, async (req, res) => {
+app.delete('/admin/sessions/:sessionId', requireAdmin, (req, res) => {
   try {
     const { sessionId } = req.params;
     
-    if (await deleteSession(sessionId)) {
+    if (deleteSession(sessionId)) {
       res.json({ success: true, message: 'Session deleted successfully' });
     } else {
       res.status(404).json({ success: false, error: 'Session not found' });
@@ -710,7 +713,7 @@ app.put('/admin/sessions/:sessionId', requireAdmin, [
   body('endTime').optional().trim().notEmpty(),
   body('sessionType').optional().isIn(['Core', 'Volunteer', 'Both']),
   body('status').optional().isIn(['active', 'ended', 'expired'])
-], async (req, res) => {
+], (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -730,10 +733,9 @@ app.put('/admin/sessions/:sessionId', requireAdmin, [
     if (req.body.sessionType) updates.sessionType = req.body.sessionType;
     if (req.body.status) updates.status = req.body.status;
 
-    const updatedSession = await updateSession(sessionId, updates);
-
-    if (updatedSession) {
-      res.json({ success: true, data: updatedSession });
+    if (updateSession(sessionId, updates)) {
+      const session = getSessionById(sessionId);
+      res.json({ success: true, data: session });
     } else {
       res.status(404).json({ success: false, error: 'Session not found' });
     }
@@ -746,7 +748,7 @@ app.put('/admin/sessions/:sessionId', requireAdmin, [
 app.put('/admin/attendance/:attendanceId', requireAdmin, [
   body('inTime').optional().trim().notEmpty(),
   body('outTime').optional().trim()
-], async (req, res) => {
+], (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -785,10 +787,9 @@ app.put('/admin/attendance/:attendanceId', requireAdmin, [
       }
     }
 
-    const updatedAttendance = await updateAttendance(attendanceId, updates);
-
-    if (updatedAttendance) {
-      res.json({ success: true, data: updatedAttendance });
+    if (updateAttendance(attendanceId, updates)) {
+      const attendance = getAttendanceById(attendanceId);
+      res.json({ success: true, data: attendance });
     } else {
       res.status(404).json({ success: false, error: 'Attendance record not found' });
     }
@@ -798,11 +799,11 @@ app.put('/admin/attendance/:attendanceId', requireAdmin, [
 });
 
 // Delete attendance record (admin only)
-app.delete('/admin/attendance/:attendanceId', requireAdmin, async (req, res) => {
+app.delete('/admin/attendance/:attendanceId', requireAdmin, (req, res) => {
   try {
     const { attendanceId } = req.params;
     
-    if (await deleteAttendance(attendanceId)) {
+    if (deleteAttendance(attendanceId)) {
       res.json({ success: true, message: 'Attendance record deleted successfully' });
     } else {
       res.status(404).json({ success: false, error: 'Attendance record not found' });
@@ -814,9 +815,45 @@ app.delete('/admin/attendance/:attendanceId', requireAdmin, async (req, res) => 
 
 // Get all attendance records (admin only)
 // Supports filtering: ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&studentId=ID&sessionId=ID&role=Role&name=Name
-app.get('/admin/attendance', requireAdmin, async (req, res) => {
+app.get('/admin/attendance', requireAdmin, (req, res) => {
   try {
-    const attendance = await getAttendance(req.query);
+    const { startDate, endDate, studentId, sessionId, role, name } = req.query;
+    let attendance = getAttendance();
+    
+    // Debug logging in development
+    if (NODE_ENV === 'development') {
+      console.log('Fetching attendance - Total records:', attendance.length);
+      console.log('Filters:', { startDate, endDate, studentId, sessionId, role, name });
+    }
+
+    // Apply filters
+    if (startDate) {
+      attendance = attendance.filter(a => {
+        const recordDate = a.date || (a.inTime ? a.inTime.split('T')[0] : null);
+        return recordDate && new Date(recordDate) >= new Date(startDate);
+      });
+    }
+    if (endDate) {
+      attendance = attendance.filter(a => {
+        const recordDate = a.date || (a.inTime ? a.inTime.split('T')[0] : null);
+        return recordDate && new Date(recordDate) <= new Date(endDate);
+      });
+    }
+    if (studentId) {
+      attendance = attendance.filter(a => a.studentId === studentId);
+    }
+    if (sessionId) {
+      attendance = attendance.filter(a => a.sessionId === sessionId);
+    }
+    if (role) {
+      attendance = attendance.filter(a => a.studentRole === role);
+    }
+    if (name) {
+      attendance = attendance.filter(a => 
+        a.studentName && a.studentName.toLowerCase().includes(name.toLowerCase())
+      );
+    }
+
     res.json({ success: true, data: attendance });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -824,10 +861,11 @@ app.get('/admin/attendance', requireAdmin, async (req, res) => {
 });
 
 // Get attendance by session (admin only)
-app.get('/admin/attendance/session/:sessionId', requireAdmin, async (req, res) => {
+app.get('/admin/attendance/session/:sessionId', requireAdmin, (req, res) => {
   try {
     const { sessionId } = req.params;
-    const sessionAttendance = await getAttendance({ sessionId });
+    const attendance = getAttendance();
+    const sessionAttendance = attendance.filter(a => a.sessionId === sessionId);
     res.json({ success: true, data: sessionAttendance });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -836,9 +874,33 @@ app.get('/admin/attendance/session/:sessionId', requireAdmin, async (req, res) =
 
 // Get attendance in spreadsheet format (admin only)
 // Supports role filtering: ?role=Core Member or ?role=Volunteer
-app.get('/admin/attendance/export/csv', requireAdmin, async (req, res) => {
+app.get('/admin/attendance/export/csv', requireAdmin, (req, res) => {
   try {
-    const attendance = await getAttendance(req.query);
+    const { startDate, endDate, studentId, sessionId, role } = req.query;
+    let attendance = getAttendance();
+
+    // Apply filters
+    if (startDate) {
+      attendance = attendance.filter(a => {
+        const recordDate = a.date || (a.inTime ? a.inTime.split('T')[0] : null);
+        return recordDate && new Date(recordDate) >= new Date(startDate);
+      });
+    }
+    if (endDate) {
+      attendance = attendance.filter(a => {
+        const recordDate = a.date || (a.inTime ? a.inTime.split('T')[0] : null);
+        return recordDate && new Date(recordDate) <= new Date(endDate);
+      });
+    }
+    if (studentId) {
+      attendance = attendance.filter(a => a.studentId === studentId);
+    }
+    if (sessionId) {
+      attendance = attendance.filter(a => a.sessionId === sessionId);
+    }
+    if (role) {
+      attendance = attendance.filter(a => a.studentRole === role);
+    }
 
     const header = [
       'ID', 'SessionID', 'SessionName', 'SessionDate', 'StudentID', 'StudentName', 'StudentRole',
@@ -862,7 +924,7 @@ app.get('/admin/attendance/export/csv', requireAdmin, async (req, res) => {
         record.id,
         record.sessionId,
         `"${record.sessionName || ''}"`,
-        record.sessionDate ? new Date(record.sessionDate).toISOString().split('T')[0] : '',
+        record.sessionDate || (record.inTime ? record.inTime.split('T')[0] : ''),
         record.studentId,
         `"${record.studentName || ''}"`,
         record.studentRole || '',
@@ -881,9 +943,47 @@ app.get('/admin/attendance/export/csv', requireAdmin, async (req, res) => {
     res.status(200).send(csv);
 
   } catch (error) {
+    console.error('CSV Export Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate CSV file.' });
+  }
+});
+
+app.get('/admin/attendance/spreadsheet', requireAdmin, (req, res) => {
+  try {
+    const { startDate, endDate, studentId, sessionId, role } = req.query;
+    const attendance = getAttendance();
+    const students = getStudents();
+    const sessions = getSessions();
+
+    // Filter attendance if needed
+    let filteredAttendance = attendance;
+    if (startDate) {
+      filteredAttendance = filteredAttendance.filter(a => {
+        const recordDate = a.date || (a.inTime ? a.inTime.split('T')[0] : null);
+        return recordDate && new Date(recordDate) >= new Date(startDate);
+      });
+    }
+    if (endDate) {
+      filteredAttendance = filteredAttendance.filter(a => {
+        const recordDate = a.date || (a.inTime ? a.inTime.split('T')[0] : null);
+        return recordDate && new Date(recordDate) <= new Date(endDate);
+      });
+    }
+    if (studentId) {
+      filteredAttendance = filteredAttendance.filter(a => a.studentId === studentId);
+    }
+    if (sessionId) {
+      filteredAttendance = filteredAttendance.filter(a => a.sessionId === sessionId);
+    }
+    if (role) {
+      filteredAttendance = filteredAttendance.filter(a => a.studentRole === role);
+    }
 
     // Filter students by role if specified
-    const filteredStudents = role ? allStudents.filter(s => s.role === role) : allStudents;
+    let filteredStudents = students;
+    if (role) {
+      filteredStudents = students.filter(s => s.role === role);
+    }
 
     // Group by student and session/date
     const studentMap = new Map();
@@ -896,40 +996,117 @@ app.get('/admin/attendance/export/csv', requireAdmin, async (req, res) => {
       });
     });
 
-    attendance.forEach(record => {
+    filteredAttendance.forEach(record => {
       const student = studentMap.get(record.studentId);
       if (student) {
         const sessionKey = `${record.sessionId}_${record.sessionName}`;
         if (!student.sessions.has(sessionKey)) {
+          // Format: "In: 10:02 | Out: 17:45" or "In: 10:02 | Out: -" or "Absent"
+          let cellValue = 'Absent';
+          if (record.inTime) {
+            const inTime = new Date(record.inTime);
+            const inTimeStr = inTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            if (record.outTime) {
+              const outTime = new Date(record.outTime);
+              const outTimeStr = outTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+              cellValue = `In: ${inTimeStr} | Out: ${outTimeStr}`;
+            } else {
+              cellValue = `In: ${inTimeStr} | Out: -`;
+            }
+          }
+          
           student.sessions.set(sessionKey, {
-            id: record.id,
-            duration: record.duration || 0,
-            status: record.status || 'absent'
+            sessionId: record.sessionId,
+            sessionName: record.sessionName,
+            date: record.date || (record.inTime ? record.inTime.split('T')[0] : null),
+            inTime: record.inTime,
+            outTime: record.outTime,
+            duration: record.duration,
+            status: record.status,
+            cellValue: cellValue
           });
         }
       }
     });
 
-    // Convert maps to arrays for JSON response
-    const spreadsheetData = Array.from(studentMap.values()).map(student => {
-      return {
-        ...student,
-        sessions: Object.fromEntries(student.sessions)
-      };
+    // Get unique sessions/dates
+    const uniqueSessions = new Set();
+    filteredAttendance.forEach(record => {
+      const date = record.date || (record.inTime ? record.inTime.split('T')[0] : null);
+      if (date) {
+        uniqueSessions.add(JSON.stringify({
+          sessionId: record.sessionId,
+          sessionName: record.sessionName,
+          date: date
+        }));
+      }
     });
 
-    // Get unique sessions for header
-    const uniqueSessions = allSessions.map(s => ({
-      id: s.sessionId,
-      name: s.name,
-      date: s.date
-    }));
+    const sessionList = Array.from(uniqueSessions).map(s => JSON.parse(s))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Build spreadsheet data
+    const spreadsheetData = Array.from(studentMap.values()).map(student => {
+      const row = {
+        studentId: student.id,
+        name: student.name,
+        role: student.role,
+        sessions: {}
+      };
+      sessionList.forEach(session => {
+        const sessionKey = `${session.sessionId}_${session.sessionName}`;
+        const attendance = student.sessions.get(sessionKey);
+        row.sessions[session.sessionId] = attendance ? attendance.cellValue : 'Absent';
+      });
+      return row;
+    });
+
+    // Handle case with no attendance records
+    if (filteredAttendance.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          role: role || 'All',
+          students: [],
+          sessions: [],
+          summary: {
+            totalStudents: filteredStudents.length,
+            totalSessions: 0,
+            totalRecords: 0,
+            present: 0,
+            partial: 0,
+            absent: 0,
+            averageDuration: 0
+          }
+        }
+      });
+    }
+
+    // Calculate summary statistics
+    const totalSessions = sessionList.length;
+    const presentCount = filteredAttendance.filter(a => a.status === 'present').length;
+    const partialCount = filteredAttendance.filter(a => a.status === 'partial').length;
+    const absentCount = Math.max(0, (filteredStudents.length * totalSessions) - (presentCount + partialCount));
+    const totalDuration = filteredAttendance
+      .filter(a => a.duration)
+      .reduce((sum, a) => sum + (a.duration || 0), 0);
+    const avgDuration = presentCount > 0 ? Math.round(totalDuration / presentCount) : 0;
 
     res.json({
       success: true,
       data: {
+        role: role || 'All',
         students: spreadsheetData,
-        sessions: uniqueSessions
+        sessions: sessionList,
+        summary: {
+          totalStudents: filteredStudents.length,
+          totalSessions: totalSessions,
+          totalRecords: filteredAttendance.length,
+          present: presentCount,
+          partial: partialCount,
+          absent: absentCount,
+          averageDuration: avgDuration
+        }
       }
     });
   } catch (error) {
@@ -939,12 +1116,12 @@ app.get('/admin/attendance/export/csv', requireAdmin, async (req, res) => {
 
 // Export attendance as CSV (admin only)
 // Supports role filtering: ?role=Core Member or ?role=Volunteer
-app.get('/admin/attendance/export/csv', requireAdmin, async (req, res) => {
+app.get('/admin/attendance/export/csv', requireAdmin, (req, res) => {
   try {
     const { startDate, endDate, studentId, sessionId, role } = req.query;
-    const attendance = await getAttendance(req.query);
-    const students = await getStudents();
-    const sessions = await getSessions();
+    const attendance = getAttendance();
+    const students = getStudents();
+    const sessions = getSessions();
 
     // Filter attendance if needed
     let filteredAttendance = attendance;
@@ -990,31 +1167,32 @@ app.get('/admin/attendance/export/csv', requireAdmin, async (req, res) => {
 });
 
 // Get attendance analytics (admin only)
-app.get('/admin/dashboard', requireAdmin, async (req, res) => {
+app.get('/admin/attendance/analytics', requireAdmin, (req, res) => {
   try {
-    const [students, attendance, sessions] = await Promise.all([
-      getStudents(),
-      getAttendance(),
-      getSessions()
-    ]);
+    const attendance = getAttendance();
+    const students = getStudents();
+    const sessions = getSessions();
 
-    const totalRecords = attendance.length;
+    // Calculate analytics
     const totalSessions = sessions.length;
-    
-    // Calculate attendance percentage per student
+    const totalRecords = attendance.length;
+    const uniqueStudents = new Set(attendance.map(a => a.studentId)).size;
+
+    // Per-student analytics
     const studentAnalytics = students.map(student => {
       const studentAttendance = attendance.filter(a => a.studentId === student.id);
       const presentCount = studentAttendance.length;
       const attendancePercentage = totalSessions > 0 ? (presentCount / totalSessions * 100).toFixed(2) : 0;
-      const isLowAttendance = parseFloat(attendancePercentage) < 50;
+      const absentCount = totalSessions - presentCount;
 
       return {
-        id: student.id,
+        studentId: student.id,
         name: student.name,
-        role: student.role,
-        presentCount,
-        attendancePercentage,
-        isLowAttendance
+        class: student.class,
+        present: presentCount,
+        absent: absentCount,
+        percentage: parseFloat(attendancePercentage),
+        isLowAttendance: parseFloat(attendancePercentage) < 75
       };
     });
 
