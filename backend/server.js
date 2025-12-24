@@ -25,8 +25,7 @@ const {
   verifyToken,
   removeToken,
   generateSignature,
-  verifySignature,
-  updatePassword
+  verifySignature
 } = require('./auth');
 
 const app = express();
@@ -41,6 +40,7 @@ if (NODE_ENV === 'production') {
   }
   if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD === 'admin123') {
     console.warn('⚠️  WARNING: ADMIN_PASSWORD should be changed from default in production!');
+    console.warn('   Set ADMIN_PASSWORD environment variable to change the password.');
   }
 }
 
@@ -60,7 +60,8 @@ const corsOptions = {
       process.env.FRONTEND_URL,
       'http://localhost:3000',
       'http://localhost:5173', // Vite dev server
-      /\.vercel\.app$/, // Vercel preview and production
+      /\.vercel\.app$/, // Vercel preview and production domains
+      /^https:\/\/.*\.vercel\.app$/, // Vercel production
     ].filter(Boolean);
     
     // Check if origin matches any allowed origin
@@ -77,6 +78,8 @@ const corsOptions = {
       // In development, allow all origins
       callback(null, true);
     } else {
+      // In production, log the origin for debugging
+      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -144,7 +147,7 @@ app.get('/', (req, res) => {
 // Admin login with validation and rate limiting
 app.post('/login', loginLimiter, [
   body('password').trim().notEmpty().withMessage('Password is required')
-], async (req, res) => {
+], (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -155,7 +158,7 @@ app.post('/login', loginLimiter, [
     }
 
     const { password } = req.body;
-    const isValid = await verifyPassword(password);
+    const isValid = verifyPassword(password);
     
     if (isValid) {
       const token = generateToken();
@@ -787,7 +790,8 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📁 Data stored in: ${__dirname}/data/`);
   console.log(`🌍 Environment: ${NODE_ENV}`);
-  console.log(`🔐 Default admin password: admin123`);
+  const currentPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  console.log(`🔐 Admin password: ${currentPassword}`);
   console.log(`   (Set ADMIN_PASSWORD env variable to change)`);
   console.log(`💚 Health check: http://localhost:${PORT}/health`);
 });

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: attendance-backend
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is automatically set by Render, no need to specify
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false  # Set this manually in Render dashboard
+      - key: FRONTEND_URL
+        sync: false  # Set this manually after deploying frontend to Vercel
+

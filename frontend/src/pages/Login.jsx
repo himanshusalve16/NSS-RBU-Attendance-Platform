@@ -72,7 +72,7 @@ function Login() {
             </button>
           </div>
           <div className="text-center text-sm text-gray-500">
-            <p>Default password: <code className="bg-gray-100 px-2 py-1 rounded">admin123456</code></p>
+            <p>Default password: <code className="bg-gray-100 px-2 py-1 rounded">admin1</code></p>
           </div>
         </form>
       </div>
